@@ -8,9 +8,9 @@ This file defines *what you hand off*, not how to do the steps. **For detailed S
 
 | Step | Your responsibility |
 |---|---|
-| **Current-main preparation** | Fetch `origin/main`, create/rebase the isolated contribution base to that exact SHA, and run the baseline-impact gate against the last validated main SHA before deciding what evidence must be rerun. |
+| **Current-main preparation** | Fetch `origin/<base_branch>`, create/rebase the isolated contribution base to that exact SHA, and run the baseline-impact gate against the last validated main SHA before deciding what evidence must be rerun. |
 | **Step 1** | Run `model-breakdown`, freeze its standardized model profile, load `model_knowledge/<family>.json`, PR-mine recent model-scale commits, run the **Optimum-coverage probe**, run `winml inspect`. |
-| **Step 1b** | Run the **baseline-impact/catalog gate**: reuse proven-unaffected evidence, selectively rerun invalidated stages, or run the full baseline on `main`. |
+| **Step 1b** | Run the **baseline-impact/catalog gate**: reuse proven-unaffected evidence, selectively rerun invalidated stages, or run the full baseline on `<base_branch>`. |
 | **Step 0 (freeze last)** | Use Step 1/1b evidence to commit one cell per axis: **Effort** (L0 / L0★ / L1-light / L1 / L2), **Goal** ceiling (L0…L3), **Outcome** (L0 / L1 / L2), then emit the charter. |
 
 ## Hand-off artifact — `charter`
@@ -23,7 +23,7 @@ Emit exactly this structure (the producer consumes it verbatim; it also seeds th
   "supersedes": null,
   "model_id": "<org/model-id>",
   "model_type": "<hf config.json model_type>",
-  "target_base": "main",
+  "target_base": "<base_branch>",
   "model_profile": {
     "report_markdown": "<path to model-breakdown Markdown report>",
     "report_json": "<path to model-breakdown JSON report>",
@@ -44,7 +44,7 @@ Emit exactly this structure (the producer consumes it verbatim; it also seeds th
   ],
   "batch": { "is_batch": false, "rows": [] },
   "optimum_probe": { "vendor": [], "after_winml": [], "added_by_winml": [], "verdict": "VENDOR-ONLY | VENDOR+OVERRIDE | WINML-ONLY | UNREGISTERED" },
-  "baseline": { "main_commit": "<current origin/main sha>", "evidence_commit": "<sha on which reused evidence was executed, or current main when rerun>", "winml_version": "<version>", "build": "PASS | FAIL | FAIL-UPSTREAM", "build_command": "<exact command>", "build_evidence": "<exact success line or error>", "perf_command": "<exact command or null>", "perf_evidence": "<exact output or null>", "eval_command": "<exact command or null>", "eval_evidence": "<exact output or blocker>", "config_command": "<exact winml config command>", "config_recipe": "temp/baseline_<stem>/<task>_config.json", "goal_floor": "L0 | L1 | L2 | L3", "refresh": { "decision": "FRESH | REUSE | PARTIAL-RERUN | FULL-RERUN", "previous_main_commit": "<last validated sha or null>", "current_main_commit": "<origin/main sha>", "ancestor_check": "PASS | FAIL | NOT-APPLICABLE", "diff_command": "git diff --name-status <old>..<new> && git diff <old>..<new> -- <reviewed paths>", "changed_files": [{ "path": "<path>", "classification": "NO-IMPACT | IMPACT | UNKNOWN", "affected_stages": ["config | build | perf | parity | eval | analyze | quality-gates"], "rationale": "<content/reachability evidence>" }], "dependency_manifest": { "commands": [], "runtime_and_config_surfaces": [], "dependency_files": [], "model_and_recipe_surfaces": [] }, "candidate_patch_equivalent": true, "candidate_patch_check": "<range-diff/tree-diff command and result>", "reused_stages": [], "rerun_stages": [], "evidence_provenance": [{ "stage": "<stage>", "executed_on": "<sha>", "status": "REUSED | RERUN", "reason": "<why valid>" }] } },
+  "baseline": { "main_commit": "<current origin/<base_branch> sha>", "evidence_commit": "<sha on which reused evidence was executed, or current main when rerun>", "winml_version": "<version>", "build": "PASS | FAIL | FAIL-UPSTREAM", "build_command": "<exact command>", "build_evidence": "<exact success line or error>", "perf_command": "<exact command or null>", "perf_evidence": "<exact output or null>", "eval_command": "<exact command or null>", "eval_evidence": "<exact output or blocker>", "config_command": "<exact winml config command>", "config_recipe": "temp/baseline_<stem>/<task>_config.json", "goal_floor": "L0 | L1 | L2 | L3", "refresh": { "decision": "FRESH | REUSE | PARTIAL-RERUN | FULL-RERUN", "previous_main_commit": "<last validated sha or null>", "current_main_commit": "<origin/<base_branch> sha>", "ancestor_check": "PASS | FAIL | NOT-APPLICABLE", "diff_command": "git diff --name-status <old>..<new> && git diff <old>..<new> -- <reviewed paths>", "changed_files": [{ "path": "<path>", "classification": "NO-IMPACT | IMPACT | UNKNOWN", "affected_stages": ["config | build | perf | parity | eval | analyze | quality-gates"], "rationale": "<content/reachability evidence>" }], "dependency_manifest": { "commands": [], "runtime_and_config_surfaces": [], "dependency_files": [], "model_and_recipe_surfaces": [] }, "candidate_patch_equivalent": true, "candidate_patch_check": "<range-diff/tree-diff command and result>", "reused_stages": [], "rerun_stages": [], "evidence_provenance": [{ "stage": "<stage>", "executed_on": "<sha>", "status": "REUSED | RERUN", "reason": "<why valid>" }] } },
   "eval_plan": {
     "task": "<canonical task>",
     "baseline_support": "SUPPORTED | UNSUPPORTED-TASK | MISSING-DATASET-ADAPTER | MISSING-PREPROCESSOR | MISSING-PREDICTION-DECODER | MISSING-METRIC | DATA-INCOMPATIBLE",
@@ -63,7 +63,7 @@ Emit exactly this structure (the producer consumes it verbatim; it also seeds th
 
 For image/audio/video datasets, `media_decode_contract` is not paperwork. Probe one real row from the pinned remote source in the same environment used for Eval and record the value representation plus decoder/runtime requirements. Also probe the raw generator/source representation before decoded-row or schema coercion: preserve the raw media locator/bytes and target value, verify the target can be encoded by its declared feature, and compare both with the public row. If media decoding is disabled or a feature is cast, prove that every non-media feature retains its original type and semantics (especially `ClassLabel` names); reconstruct only the media feature rather than replacing the whole `Features` mapping. A synthetic in-memory array test does not prove that Hub bytes decode: dataset libraries may select optional backends whose native libraries, FFmpeg build, or PyTorch compatibility fail only when the first media row is materialized. Prefer implementations that own a minimal stable decode contract (for example raw bytes/path plus a declared decoder) over silently inheriting a dataset library's changing default backend.
 
-`target_base` is invariant for Lane B and must be the literal `main`. Do not replace it with the head branch of a prerequisite PR. If this contribution needs commits from another open PR, record that dependency and required merge order in the charter/PR narrative; the dependency may be an ancestor of candidate HEAD, but the GitHub PR still compares and merges into `main`.
+`target_base` is invariant for Lane B and must be the literal `<base_branch>`. Do not replace it with the head branch of a prerequisite PR. If this contribution needs commits from another open PR, record that dependency and required merge order in the charter/PR narrative; the dependency may be an ancestor of candidate HEAD, but the GitHub PR still compares and merges into `<base_branch>`.
 
 ### `model_profile` is a frozen cross-skill artifact
 
@@ -73,11 +73,11 @@ Report paths, scratch artifacts, logs, and hashes are hand-off metadata, not PR-
 
 Do not synthesize a substitute profile from `winml inspect` or memory. `winml inspect`, the Optimum probe, and model knowledge answer support-planning questions; `model-breakdown` owns model meaning and structure. If the report is unavailable, stale for a different revision/class, missing one of the four fields, or contains an unresolved identity ambiguity, put that fact in `blocking_questions` instead of inventing metadata. Downstream roles may quote or format the frozen profile but may not enrich it with new claims.
 
-### Baseline-impact gate after `main` moves
+### Baseline-impact gate after `<base_branch>` moves
 
 Before rerunning Step 1/1b, locate the most recent accepted charter for the same model, checkpoint revision, task, target plan, commands, environment, and toolchain. If any of those identities changed, there is no reusable baseline: emit `FULL-RERUN`. Otherwise:
 
-1. Fetch current `origin/main`; record old evidence SHA and new main SHA. Require `git merge-base --is-ancestor <old> <new>` to pass. A rewritten/unavailable history is `FULL-RERUN`.
+1. Fetch current `origin/<base_branch>`; record old evidence SHA and new main SHA. Require `git merge-base --is-ancestor <old> <new>` to pass. A rewritten/unavailable history is `FULL-RERUN`.
 2. Capture the complete change set with `git diff --name-status <old>..<new>` and inspect the content of every changed file. Freeze a dependency manifest from the baseline commands: relevant WinML config/resolution/export/build/optimization/quantization/runtime/inference/eval/analyze modules, recipes/model registration, dependency/lock files, CLI entry points, and applicable workflow/test configuration.
 3. Classify every changed file `NO-IMPACT`, `IMPACT`, or `UNKNOWN`, with a content-based reachability rationale. Generated reports, docs, or fixtures for unrelated models may be `NO-IMPACT` only after confirming they are not loaded by a baseline command. Any runtime/config source, dependency or lock file, applicable recipe/model metadata, shared test asset, command default, or uncertain transitive import is `IMPACT`/`UNKNOWN`.
 4. After rebase, verify the contribution-owned patch is semantically equivalent using `git range-diff` and a focused tree diff of owned source/recipe/test paths. Conflict resolution, changed patch content, or ambiguity invalidates final-candidate evidence and makes the relevant baseline stages at least `PARTIAL-RERUN`.
@@ -109,7 +109,7 @@ Emit `REUSE` only if all files are `NO-IMPACT`, candidate patch equivalence pass
 
 ## Step 0 — Freeze a target on each axis (only after Step 1/1b evidence)
 
-Do not guess E/G/O before current-main evidence exists. First fetch/rebase to current `origin/main`, complete Step 1 diagnosis, run the Step 1b baseline-impact gate and all required reruns, and then pick one cell per axis. Proven-unaffected evidence may retain an older `evidence_commit`, but the charter must bind the impact decision to current main. The resulting charter is still frozen before producer work begins; its tiers are evidence-derived rather than speculative.
+Do not guess E/G/O before current-main evidence exists. First fetch/rebase to current `origin/<base_branch>`, complete Step 1 diagnosis, run the Step 1b baseline-impact gate and all required reruns, and then pick one cell per axis. Proven-unaffected evidence may retain an older `evidence_commit`, but the charter must bind the impact decision to current main. The resulting charter is still frozen before producer work begins; its tiers are evidence-derived rather than speculative.
 
 ### Effort axis — how much work do you expect
 
@@ -158,7 +158,7 @@ Do not guess E/G/O before current-main evidence exists. First fetch/rebase to cu
 | **L1** | L0 + source code under `models/hf/` | L0 report + learner's `model_knowledge/<family>.json` finding documenting code + gaps |
 | **L2** | L1 + `TASK_REGISTRY` entry / new `models/winml/<task>.py` | L1 report + learner's `skill_meta/` finding documenting new task-family pattern |
 
-**Pre-flight** ([`_meta-061`](../skill_meta/findings.json), which supersedes [`_meta-038`](../skill_meta/findings.json)'s "catalog clone → don't file" conclusion): a recipe is **always** the deliverable — there is no "no-gain, don't file" outcome. Run Step 1b's baseline first, but read a passing baseline as "**L0 is inherited from `main`**", not "there is nothing to ship": a recipe checked in under a specific `<ep>/<device>/` folder is a *verified-coverage claim* for that EP that the out-of-the-box CPU auto-build does not establish. Use Step 1b's `winml config` output as the **starting** recipe; ship a refinement of it, and let the explainer/reviewer diff the two to document what changed. A passing baseline changes the **Goal ceiling** (climb above L0, per the ceiling-selection rule), not whether you file.
+**Pre-flight** ([`_meta-061`](../skill_meta/findings.json), which supersedes [`_meta-038`](../skill_meta/findings.json)'s "catalog clone → don't file" conclusion): a recipe is **always** the deliverable — there is no "no-gain, don't file" outcome. Run Step 1b's baseline first, but read a passing baseline as "**L0 is inherited from `<base_branch>`**", not "there is nothing to ship": a recipe checked in under a specific `<ep>/<device>/` folder is a *verified-coverage claim* for that EP that the out-of-the-box CPU auto-build does not establish. Use Step 1b's `winml config` output as the **starting** recipe; ship a refinement of it, and let the explainer/reviewer diff the two to document what changed. A passing baseline changes the **Goal ceiling** (climb above L0, per the ceiling-selection rule), not whether you file.
 
 ---
 
@@ -231,25 +231,25 @@ For composite (seq2seq / encoder-decoder), inspect carries `pipeline_tasks` and 
 
 ---
 
-## Step 1b — Baseline probe (measure `main`'s support level + generate the starting recipe)
+## Step 1b — Baseline probe (measure `<base_branch>`'s support level + generate the starting recipe)
 
-Run the **most basic commands** on `main` with no recipe (auto-config only) to measure how far the CLI already carries this model out of the box. Ask three questions, each mapping to a Goal tier:
+Run the **most basic commands** on `<base_branch>` with no recipe (auto-config only) to measure how far the CLI already carries this model out of the box. Ask three questions, each mapping to a Goal tier:
 
 - **`winml build -m <id>`** (no `-c`, no `-p`) — does it build at all? → **L0**
 - **`winml perf -m <built.onnx>`** — does it run/perf? → **L1**
 - **`winml eval --task <task>`** — is this task's accuracy even measurable? → **L3**
 
-The answer is the model's **out-of-the-box support level on `main`** — the **floor** the contribution builds above. It does two jobs: (1) it lets you back out an honest **Goal ceiling** via the ceiling-selection rule (aim strictly above whatever the baseline already gives free); (2) its `winml config` output is the **starting recipe** the producer refines and the explainer/reviewer diff against. A passing baseline never means "don't file" — it means L0 is inherited and the Goal must climb.
+The answer is the model's **out-of-the-box support level on `<base_branch>`** — the **floor** the contribution builds above. It does two jobs: (1) it lets you back out an honest **Goal ceiling** via the ceiling-selection rule (aim strictly above whatever the baseline already gives free); (2) its `winml config` output is the **starting recipe** the producer refines and the explainer/reviewer diff against. A passing baseline never means "don't file" — it means L0 is inherited and the Goal must climb.
 
-> **"`main`" means CURRENT `origin/main`, not the commit you happened to branch from ([`_meta-052`](../skill_meta/findings.json)).** Before running the baseline you MUST `git fetch origin main` and cut/rebase the work branch onto that HEAD, then record the exact commit. A worktree can live for days; `main` moves under it. A baseline run against a stale start-of-work `main` proves nothing about whether the recipe delta still holds on the `main` the PR will actually merge into.
+> **"`<base_branch>`" means CURRENT `origin/<base_branch>`, not the commit you happened to branch from ([`_meta-052`](../skill_meta/findings.json)).** Before running the baseline you MUST `git fetch origin <base_branch>` and cut/rebase the work branch onto that HEAD, then record the exact commit. A worktree can live for days; `<base_branch>` moves under it. A baseline run against a stale start-of-work `<base_branch>` proves nothing about whether the recipe delta still holds on the `<base_branch>` the PR will actually merge into.
 
-This current-main refresh and baseline decision are **planner work and precede charter issuance**. On the initial entry, planner prepares the isolated base at current `origin/main`; producer does not exist yet, and a model with no matching accepted prior charter receives a fresh baseline. Do not emit a charter with provisional Effort/Goal/Outcome and fill in the baseline later. If `main` moves after charter issuance, producer rebases the PR branch, then planner runs the baseline-impact gate on that exact base and re-issues the charter before tester evidence or PR prose is refreshed.
+This current-main refresh and baseline decision are **planner work and precede charter issuance**. On the initial entry, planner prepares the isolated base at current `origin/<base_branch>`; producer does not exist yet, and a model with no matching accepted prior charter receives a fresh baseline. Do not emit a charter with provisional Effort/Goal/Outcome and fill in the baseline later. If `<base_branch>` moves after charter issuance, producer rebases the PR branch, then planner runs the baseline-impact gate on that exact base and re-issues the charter before tester evidence or PR prose is refreshed.
 
 **Re-charter protocol.** Preserve the previous charter as immutable history and emit a complete replacement with an incremented `charter_revision` and `supersedes` reference; never patch the old charter in place. A post-seal byte change invalidates the entire root even when an earlier independent rehash passed: record expected and observed hashes/timestamps as an incident, do not reseal or reuse the root, and re-enter in a new empty root ([`_meta-122`](../skill_meta/findings.json)). For a main-only refresh, preserve the frozen `model_profile` and rerun Step 1b plus E/G/O/fix-class derivation. Rerun Step 1/model-breakdown only when model identity/revision/class or relevant support diagnosis changed. Once re-issued, every downstream role switches to the replacement charter and refreshes any artifact derived from superseded fields.
 
 ```powershell
-git fetch origin main                          # refresh the ref FIRST
-git rev-parse origin/main                       # record this — baseline & PR must cite it
+git fetch origin <base_branch>                          # refresh the ref FIRST
+git rev-parse origin/<base_branch>                       # record this — baseline & PR must cite it
 
 # L0 probe — does it build?
 winml build -m <hf-id> -o temp/baseline_<stem> `
@@ -271,9 +271,9 @@ winml config -m <hf-id> [-t <task>] [--model-class <cls>] -o temp/baseline_<stem
 # Only then use --trust-remote-code with approved exact revisions inside credential-free isolation.
 ```
 
-- **No `-c <recipe>`. No `-p <precision>`. No PR files. No `--task` on build.** This is a `main`-only, fp32, out-of-the-box support probe. Precision is a `-p`-flag concern, orthogonal to the recipe — it does NOT belong in the baseline.
-- **Freshness and provenance**: the branch base / worktree HEAD for a freshly executed baseline MUST equal `git rev-parse origin/main`. If `main` later moves, rebase and run the baseline-impact gate. `baseline.main_commit` advances to current main; reused measurements retain their older `baseline.evidence_commit`. Rerun only the invalidated stage closure, but fail closed to a full rerun when no-impact cannot be proved.
-- **PASSES** → CLI on `main` already builds/runs the model, so **L0 is inherited** — raise the Goal ceiling above what the baseline demonstrated (ceiling-selection rule). You still file: the recipe captures EP-specific verified coverage `main`'s CPU auto-build does not. Ship the `winml config` recipe (refined), and cite the recipe-vs-config diff so the reviewer sees what changed (may be "identical to auto-config, filed for verified `<ep>/<device>` coverage").
+- **No `-c <recipe>`. No `-p <precision>`. No PR files. No `--task` on build.** This is a `<base_branch>`-only, fp32, out-of-the-box support probe. Precision is a `-p`-flag concern, orthogonal to the recipe — it does NOT belong in the baseline.
+- **Freshness and provenance**: the branch base / worktree HEAD for a freshly executed baseline MUST equal `git rev-parse origin/<base_branch>`. If `<base_branch>` later moves, rebase and run the baseline-impact gate. `baseline.main_commit` advances to current main; reused measurements retain their older `baseline.evidence_commit`. Rerun only the invalidated stage closure, but fail closed to a full rerun when no-impact cannot be proved.
+- **PASSES** → CLI on `<base_branch>` already builds/runs the model, so **L0 is inherited** — raise the Goal ceiling above what the baseline demonstrated (ceiling-selection rule). You still file: the recipe captures EP-specific verified coverage `<base_branch>`'s CPU auto-build does not. Ship the `winml config` recipe (refined), and cite the recipe-vs-config diff so the reviewer sees what changed (may be "identical to auto-config, filed for verified `<ep>/<device>` coverage").
 - **FAILS** → quote exact error in PR. Recipe must fix this failure. (Baseline error) → (recipe success) = your engineering delta.
 - **PASSES BUT completion marker is on stderr** (Rich console and some EP shims, [`_meta-111`](../skill_meta/findings.json)) → accept only when the process exits 0, the final artifact exists and passes structural validation, and `Build complete` appears in captured combined output or the expected Rich stderr stream. Never require stdout specifically, and never accept the marker without the artifact checks.
 - **PROBABILISTIC baseline** ([`_meta-053`](../skill_meta/findings.json)) → some models crash only when the random dummy input happens to *lack* (or *contain*) a special token — e.g. a sequence-classification head that pools at the last `eos` via `input_ids.eq(eos_token_id)` fails ~98% of the time on a random `seq_len=1024` dummy but *passes* the ~2% of runs where a random token equals `eos`. **A single baseline run is not authoritative for such models.** If the failure mode depends on dummy content, run the baseline **≥3 times** (or force a deterministic dummy) before recording PASS/FAIL, and note the flakiness in the charter — it is itself evidence the recipe's `value_range` pinning adds deterministic value.
@@ -285,11 +285,11 @@ winml config -m <hf-id> [-t <task>] [--model-class <cls>] -o temp/baseline_<stem
 | FAILS | Yes | Recipe fixes failure |
 | Cannot run (fetch fails) | Fall back to HF repo inspection | No baseline to compare |
 
-### Baseline result sets the Goal FLOOR — aim strictly above what `main` gives free
+### Baseline result sets the Goal FLOOR — aim strictly above what `<base_branch>` gives free
 
-The baseline is the earliest signal for **where the Goal ladder should start**. It sets the *floor*: whatever the baseline already demonstrates is inherited from `main`, so the contribution's headline Goal must be the **highest reachable tier above** that floor — not a re-report of what the catalog already does. Map the baseline outcome onto the committed Goal ceiling before you freeze the charter:
+The baseline is the earliest signal for **where the Goal ladder should start**. It sets the *floor*: whatever the baseline already demonstrates is inherited from `<base_branch>`, so the contribution's headline Goal must be the **highest reachable tier above** that floor — not a re-report of what the catalog already does. Map the baseline outcome onto the committed Goal ceiling before you freeze the charter:
 
-| Baseline build on `main` | What's inherited free | Where the contribution's Goal ceiling belongs |
+| Baseline build on `<base_branch>` | What's inherited free | Where the contribution's Goal ceiling belongs |
 |---|---|---|
 | **FAILS** | nothing — L0 is a genuine deliverable | L0 (make it build) is the floor; march up from there |
 | **PASSES, build only** | L0 (build) | ceiling **≥ L1** — L0 is labelled "inherited from baseline" in the table, the contribution's own work starts at perf |
@@ -299,7 +299,7 @@ So the baseline result and the Goal ceiling are set **together**: a passing base
 
 > **Do not let "defer to CI" cap the ceiling below what the test host can verify** ([`_meta-062`](../skill_meta/findings.json)). The host's CPU reaches L0/L1/L2 plus L3 whenever a compatible evaluator and real sample exist. L3 here is one bounded FP32 CPU functional smoke. It belongs in the ceiling and may not be punted to CI. Accelerator, additional-precision, and benchmark-scale Eval are optional rather than deferred coverage obligations.
 
-**Reviewer requirement**: every recipe PR must cite baseline-build command + output, `winml --version`, current `baseline.main_commit`, and the actual `baseline.evidence_commit`. The current-main commit MUST equal `origin/main` at review time ([`_meta-052`](../skill_meta/findings.json)); an older evidence commit is acceptable only with the complete `_meta-107` impact attestation and honest per-stage provenance. The PR must also include the **recipe-vs-`winml config` diff** ([`_meta-061`](../skill_meta/findings.json)) so the reviewer can see exactly what the shipped recipe changed over `main`'s auto-config (an identical diff is acceptable and is recorded as "filed for verified `<ep>/<device>` coverage"). See [agents/reviewer.md](./reviewer.md) for full checklist.
+**Reviewer requirement**: every recipe PR must cite baseline-build command + output, `winml --version`, current `baseline.main_commit`, and the actual `baseline.evidence_commit`. The current-main commit MUST equal `origin/<base_branch>` at review time ([`_meta-052`](../skill_meta/findings.json)); an older evidence commit is acceptable only with the complete `_meta-107` impact attestation and honest per-stage provenance. The PR must also include the **recipe-vs-`winml config` diff** ([`_meta-061`](../skill_meta/findings.json)) so the reviewer can see exactly what the shipped recipe changed over `<base_branch>`'s auto-config (an identical diff is acceptable and is recorded as "filed for verified `<ep>/<device>` coverage"). See [agents/reviewer.md](./reviewer.md) for full checklist.
 
 ### Step 1b triage — per-model recipe vs class-of-models code fix ([`_meta-060`](../skill_meta/findings.json))
 
@@ -356,7 +356,7 @@ For `fix_class.resolution == "code-fix"`, enumerate the public behavior and reci
 ## Hard rules
 
 - **The charter freezes scope.** If producer implementation or tester evidence contradicts a tier (for example, a VENDOR-ONLY probe still needs code, or a supposedly reachable Goal is structurally unavailable), the orchestrator sends the evidence **back to you** for a replacement charter — downstream roles never silently re-tier.
-- **A recipe is always the deliverable — a passing baseline is not a stop condition** ([`_meta-061`](../skill_meta/findings.json)). You never short-circuit the pipeline to "no PR" because `main` already builds the model: hand the producer a charter whose Goal ceiling has climbed above the inherited floor and whose recipe (seeded from Step 1b's `winml config`) captures the verified `<ep>/<device>` coverage. The only non-filing case is a genuine duplicate of an already-checked-in recipe for the same `(model, task, ep, device, precision)`.
+- **A recipe is always the deliverable — a passing baseline is not a stop condition** ([`_meta-061`](../skill_meta/findings.json)). You never short-circuit the pipeline to "no PR" because `<base_branch>` already builds the model: hand the producer a charter whose Goal ceiling has climbed above the inherited floor and whose recipe (seeded from Step 1b's `winml config`) captures the verified `<ep>/<device>` coverage. The only non-filing case is a genuine duplicate of an already-checked-in recipe for the same `(model, task, ep, device, precision)`.
 - **`blocking_questions` is an orchestrator hand-off, not producer input.** Return the otherwise-complete provisional charter with the questions populated; the orchestrator surfaces them and pauses. After the user answers, planner is invoked again with those answers and emits a replacement charter with an empty `blocking_questions` array. This is scope clarification only, not a PR-shipment consent gate.
 - **A class-of-models fix is never a recipe, and a per-model declaration is never code** ([`_meta-060`](../skill_meta/findings.json)). Run the Step 1b reducibility test and freeze the answer in `charter.fix_class`. If the override is derivable from published metadata by a rule that generalizes to a class, the Effort tier is ≥ L1 (data-driven code) even when the diff looks tiny; if it is a per-checkpoint declaration, it stays a recipe. Either way, **no `if model_type/model_id == "…"` hard-code** — a single-model code branch is a disguised recipe and is rejected.
 - **Every L3-capable charter has an actionable `eval_plan`.** It identifies baseline support status, any missing evaluator capability to implement, task-compatible data, schema/semantic mapping, validation scope, and metric interpretation. Revision pins, seeds, and detailed row accounting are recommended when practical, not standalone acceptance gates.

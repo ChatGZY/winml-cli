@@ -148,7 +148,7 @@ Conventions:
 
 ## Step 5 — Common pitfalls (check before hand-off, regardless of tier)
 
-- **Run every workflow-defined static check before the first push.** Read the current PR-triggered workflow files and run their complete non-hardware static commands on the candidate tree before handing it to tester or explainer. For `microsoft/winml-cli`, this means both `uv run ruff check src/ tests/` and `uv run mypy -p winml.modelkit`; a touched-file Ruff pass is not a complete producer hand-off. Record the exact commands and results in `compatibility_evidence.regression_tests`. A failure must be fixed before push unless the identical command fails on clean current `origin/main` in the same environment and that baseline evidence is recorded.
+- **Run every workflow-defined static check before the first push.** Read the current PR-triggered workflow files and run their complete non-hardware static commands on the candidate tree before handing it to tester or explainer. For winml-cli (both `<target_repo>` and `<upstream_repo>` run these workflows), this means both `uv run ruff check src/ tests/` and `uv run mypy -p winml.modelkit`; a touched-file Ruff pass is not a complete producer hand-off. Record the exact commands and results in `compatibility_evidence.regression_tests`. A failure must be fixed before push unless the identical command fails on clean current `origin/<base_branch>` in the same environment and that baseline evidence is recorded.
 - **Prove requested stage bypasses at the real pipeline sink.** When the contribution changes or relies on `--no-optimize`, `skip_optimize`, `--no-quant`, or another stage-control flag, retain a focused regression plus build-stage evidence showing the forbidden stage did not execute while every independent requested stage still did. An accepted flag or resolved config value alone is not evidence that the active Rich CLI path forwarded it to the sink.
 - **New op type not in coverage rules** — producer may run `winml analyze --model <exported>.onnx --ep all --format json` as an implementation diagnostic. It does not become report evidence or a PASS claim; tester reruns and owns the formal component/op-level analysis. If new ops appear unsupported, either it is a coverage-data gap or the candidate needs an evidence-backed repair such as `nodes_to_exclude`.
 - **Random-head export (non-standard `config.architectures` + no `modeling_*.py`)** ([`_meta-066`](../skill_meta/findings.json)) — if `config.architectures` names a non-standard class (e.g. bare `'Model'`) and the repo ships no trust_remote_code `modeling_*.py`, HF falls back to a generic class and **re-initializes the task head at random**. Watch the load log for `Some weights ... were newly initialized ... you should probably TRAIN this model`. The ONNX builds and perfs fine but is numerically meaningless — L2 vs PyTorch can NEVER pass (both sides load different random heads). A recipe-only (Lane B) PR cannot fix this; escalate to Lane A (custom loader mapping the real head weights) or mark the model out-of-scope.
@@ -169,21 +169,21 @@ Once the [explainer](./explainer.md) opens the draft PR, the orchestrator re-ent
 2. **Artifact feedback from any commenter** — fix or rebut code/recipe/delta issues and provide the fixing commit/rationale to the explainer, which owns posting replies and thread resolution. Evidence, findings, charter, and body-only comments are routed to their respective owners. A PR with unaddressed human comments is not mergeable. Discovery still requires enumerating resolution state:
    ```powershell
    Remove-Item Env:GH_TOKEN -ErrorAction SilentlyContinue
-   & "$env:ProgramFiles\GitHub CLI\gh.exe" pr view <N> --repo microsoft/winml-cli --comments
+   & "$env:ProgramFiles\GitHub CLI\gh.exe" pr view <N> --repo <target_repo> --comments
    # Resolution state per thread — isResolved=false = still open, must be closed before merge:
-   & "$env:ProgramFiles\GitHub CLI\gh.exe" api graphql -F query='query{repository(owner:"microsoft",name:"winml-cli"){pullRequest(number:<N>){reviewThreads(first:50){nodes{id isResolved comments(first:5){nodes{author{login} path body}}}}}}}'
+   & "$env:ProgramFiles\GitHub CLI\gh.exe" api graphql -F query='query{repository(owner:"<target_owner>",name:"<target_name>"){pullRequest(number:<N>){reviewThreads(first:50){nodes{id isResolved comments(first:5){nodes{author{login} path body}}}}}}}'
    ```
   Do not close a comment thread silently; hand the exact commit/rationale and thread id to the explainer for reply/resolution.
 3. **CI / CD checks** — the PR must be green before it can merge. Poll status and read the failing job's log, don't guess:
    ```powershell
-   & "$env:ProgramFiles\GitHub CLI\gh.exe" pr checks <N> --repo microsoft/winml-cli
-   & "$env:ProgramFiles\GitHub CLI\gh.exe" run view <run-id> --repo microsoft/winml-cli --log-failed
+   & "$env:ProgramFiles\GitHub CLI\gh.exe" pr checks <N> --repo <target_repo>
+   & "$env:ProgramFiles\GitHub CLI\gh.exe" run view <run-id> --repo <target_repo> --log-failed
    ```
-   A CI failure is your bug to fix unless you can prove it is a pre-existing flake unrelated to the diff (cite the same failure on `main`). "CI is red but my change is fine" without that proof is not a hand-off state — fix it or document the flake in the PR.
-4. **Merge conflicts or movement in `main`** — keep the branch mergeable by rebasing onto fresh `main`, then hand control back to the orchestrator. The orchestrator must re-enter the planner to rerun the recipe-free baseline and re-issue the charter before the tester reruns affected evidence (a rebase can change both the baseline floor and the recipe's meaning):
+   A CI failure is your bug to fix unless you can prove it is a pre-existing flake unrelated to the diff (cite the same failure on `<base_branch>`). "CI is red but my change is fine" without that proof is not a hand-off state — fix it or document the flake in the PR.
+4. **Merge conflicts or movement in `<base_branch>`** — keep the branch mergeable by rebasing onto fresh `<base_branch>`, then hand control back to the orchestrator. The orchestrator must re-enter the planner to rerun the recipe-free baseline and re-issue the charter before the tester reruns affected evidence (a rebase can change both the baseline floor and the recipe's meaning):
    ```powershell
-   git fetch origin main
-   git rebase origin/main          # resolve conflicts in recipe/code paths only
+   git fetch origin <base_branch>
+   git rebase origin/<base_branch>          # resolve conflicts in recipe/code paths only
    git push --force-with-lease      # never plain --force; --force-with-lease protects concurrent pushes
    ```
   `--force-with-lease` (not `--force`) so you never clobber a commit someone else pushed. Do not refresh planner-owned baseline claims yourself. Report the new base SHA; planner refreshes baseline/tiering, then tester refreshes any evidence invalidated by the rebase.

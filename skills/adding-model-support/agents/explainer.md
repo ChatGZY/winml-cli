@@ -31,7 +31,7 @@ Render **Model architecture as the frozen model-breakdown tree**, in a fenced `t
 
 Include every subsection below, even when a supplied artifact explicitly says unavailable/blocked:
 
-1. **Baseline** — `charter.baseline`: pinned `main` commit, WinML version, baseline results, starting auto-config behavior, build/perf/eval floor, and Optimum probe. State measured results such as build time, node count, latency, and metric values, but omit local build-log paths, local output-model paths, local generated-config paths, and their hashes. Commands belong once in Reproduce commands rather than being repeated beside every result.
+1. **Baseline** — `charter.baseline`: pinned `<base_branch>` commit, WinML version, baseline results, starting auto-config behavior, build/perf/eval floor, and Optimum probe. State measured results such as build time, node count, latency, and metric values, but omit local build-log paths, local output-model paths, local generated-config paths, and their hashes. Commands belong once in Reproduce commands rather than being repeated beside every result.
 2. **Goal** — committed Effort/Goal/Outcome and Goal success definition from `charter`; preserve any ceiling change as an explicit re-issued-charter event.
 3. **Outcome** — `verdict_table.outcome`, highest reached Goal verdict, coverage annotation, deferred tuples, shipped recipe/code paths, and appended model/methodology findings.
 4. **Per-EP/device/precision results and Functional smoke Eval** — render the Goal ladder and full Perf table from `verdict_table.support_evidence.perf`; every required tuple remains present with mean/p50 latency, throughput, RAM/VRAM, or its exact blocker. Then render one separate **Functional smoke Eval** result from `support_evidence.functional_smoke_eval`: final candidate SHA, FP32 CPU path, dataset identity/scope, selected/processed samples, every fan-out cap, verified schema/label/prediction semantics, and raw task metric. State prominently that it proves end-to-end operability only and is not representative accuracy or benchmark quality. Do not create Eval rows for other precisions/EPs and do not imply their accuracy was measured. For newly supported evaluator paths, state the former blocker and capability that removed it.
@@ -96,7 +96,7 @@ For composite contributions, ship **one** report covering both halves ([`_meta-0
 
 ## Shipment (Step 7)
 
-- Open a **draft** GitHub PR against `microsoft/winml-cli` ([`_meta-033`](../skill_meta/findings.json)). The PR body is the canonical report and the draft PR itself is the hand-off; local body files are ephemeral command inputs, not a second deliverable.
+- Open a **draft** GitHub PR against `<target_repo>` (see [SKILL.md → Target repository](../SKILL.md#target-repository)), never against `<upstream_repo>` ([`_meta-033`](../skill_meta/findings.json)). The PR body is the canonical report and the draft PR itself is the hand-off; local body files are ephemeral command inputs, not a second deliverable.
 - Add and verify the actual GitHub label **`model-scale-by-skill`**. Mentioning the string in the PR body is not a substitute for label metadata. Reconcile it after resolving the real PR number, including when a PR already existed for the branch or the user created it through the manual path. A draft PR without it is incomplete; repair with `gh pr edit <pr_number> --add-label model-scale-by-skill` and verify through `gh pr view` before reviewer hand-off.
 - **Branch-per-PR**, scope matched to the Effort tier. Skill-level edits (`SKILL.md` / `agents/*.md` / `skill_meta/findings.json`) stay on the Lane A working branch, **not** in the model PR.
 - **Automatic PR creation**: after the producer pushes the branch, run `gh pr create --draft` immediately. Do not wait for the reviewer's verdict comment or user consent — the draft PR is the mechanism for both.
@@ -155,11 +155,11 @@ The explainer (not the user, per [`_meta-033`](../skill_meta/findings.json)) ope
 
 **Lane B — New model support** (`examples/recipes/<org>_<model>/` or `src/winml/modelkit/models/hf/<model_type>.py`):
 
-- **Always a new branch off `origin/main`**, `<author>/add-<org>-<model>-recipe` (or `-codegen` if code was touched). NEVER reuse the working skills branch.
-- **The live GitHub PR base is always `main`.** Do not use a prerequisite PR's head branch as `--base`, even when its commits are ancestors of this branch. Describe the dependency and merge order in the PR body instead.
+- **Always a new branch off `origin/<base_branch>`**, `<author>/add-<org>-<model>-recipe` (or `-codegen` if code was touched). NEVER reuse the working skills branch.
+- **The live GitHub PR base is always `<base_branch>`.** Do not use a prerequisite PR's head branch as `--base`, even when its commits are ancestors of this branch. Describe the dependency and merge order in the PR body instead.
 - **Scope = exactly what the contribution needed.** Match Effort tier to file set:
-  - **L0 / L0★** (recipe-only): precision-suffixed JSON files under `examples/recipes/<org>_<model>/<ep>/<device>/`, one per PASSED required tuple. Never modify `examples/recipes/README.md`. The matching knowledge append stays on Lane A until that path is accepted to `main`.
-  - **L1**: all of L0, plus `src/winml/modelkit/models/hf/<model_type>.py`, plus any pytest exercising the new path, plus a filed feature-gap-issue URL per gap.
+  - **L0 / L0★** (recipe-only): precision-suffixed JSON files under `examples/recipes/<org>_<model>/<ep>/<device>/`, one per PASSED required tuple. Never modify `examples/recipes/README.md`. The matching knowledge append stays on Lane A until that path is accepted to `<base_branch>`.
+  - **L1**: all of L0, plus `src/winml/modelkit/models/hf/<model_type>.py`, plus any pytest exercising the new path, plus a filed feature-gap-issue URL per gap (issues are filed in `<target_repo>`).
   - **L2**: all of L1, plus `src/winml/modelkit/inference/tasks.py` `TASK_REGISTRY` entry, possibly a new `models/winml/<task>.py`, plus a new `_task-<task-name>-NNN` finding.
 - **Composite recipes ship as ONE PR** per [`_meta-020`](../skill_meta/findings.json) — encoder + decoder share a branch and PR description; the verdict table expands per-half.
 - **Do NOT include skill-level edits in a model PR.** Those go to Lane A. Mixing lanes pollutes the diff.
@@ -170,9 +170,9 @@ The explainer (not the user, per [`_meta-033`](../skill_meta/findings.json)) ope
 # 0. Resolve author from the charter (already computed by planner)
 $author = "<charter.author>"   # e.g. "yongyue", "shzhen"
 
-# 1. Branch off a clean main
-git fetch origin main
-git checkout -b $author/add-<org>-<model>-recipe origin/main
+# 1. Branch off a clean <base_branch>
+git fetch origin <base_branch>
+git checkout -b $author/add-<org>-<model>-recipe origin/<base_branch>
 
 # 2. Stage ONLY scope-relevant files (explicit paths, never `git add -A`)
 git add examples/recipes/<org>_<model>/
@@ -186,10 +186,10 @@ git push -u origin $author/add-<org>-<model>-recipe
 
 # 5. Open or recover the DRAFT PR. Native gh failures do not reliably enter a
 #    PowerShell try/catch, so inspect $LASTEXITCODE and then resolve by branch.
-$repo = "microsoft/winml-cli"
+$repo = "<target_repo>"   # from SKILL.md -> Target repository; never the upstream repo
 $branch = "$author/add-<org>-<model>-recipe"
 $bodyFile = "<durable-report-path>/PR_<org>_<model>.md"
-$createOutput = gh pr create --repo $repo --draft --base main --head $branch `
+$createOutput = gh pr create --repo $repo --draft --base <base_branch> --head $branch `
   --title "recipe(<model>): <task> recipe" `
   --label "model-scale-by-skill" --body-file $bodyFile 2>&1
 $createExit = $LASTEXITCODE
@@ -202,7 +202,7 @@ if (-not $prNumber) {
   Write-Host "== MANUAL PR PATH =="
   Write-Host "Branch pushed: $branch"
   Write-Host "PR body file: $bodyFile"
-  Write-Host "Create the PR manually at: https://github.com/microsoft/winml-cli/compare/main...$branch"
+  Write-Host "Create the PR manually at: https://github.com/$repo/compare/<base_branch>...$branch"
   # Stop shipment here. Once the user supplies the PR URL, re-enter Step 5 and
   # run the exact label reconciliation below before reviewer hand-off.
   return
@@ -212,17 +212,17 @@ if (-not $prNumber) {
 #    arguments. Recovering an existing PR is not permission to inherit its base.
 $baseRef = gh pr view $prNumber --repo $repo --json baseRefName --jq '.baseRefName'
 if ($LASTEXITCODE -ne 0) { throw "Failed to read baseRefName for PR #$prNumber" }
-if ($baseRef -ne "main") {
-  gh pr edit $prNumber --repo $repo --base main
-  if ($LASTEXITCODE -ne 0) { throw "Failed to repair PR #$prNumber base from '$baseRef' to 'main'" }
+if ($baseRef -ne "<base_branch>") {
+  gh pr edit $prNumber --repo $repo --base <base_branch>
+  if ($LASTEXITCODE -ne 0) { throw "Failed to repair PR #$prNumber base from '$baseRef' to '<base_branch>'" }
 }
 
 gh pr edit $prNumber --repo $repo --add-label "model-scale-by-skill"
 if ($LASTEXITCODE -ne 0) { throw "Failed to add model-scale-by-skill to PR #$prNumber" }
 $shipment = gh pr view $prNumber --repo $repo --json baseRefName,labels | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0) { throw "Failed to verify shipment metadata for PR #$prNumber" }
-if ($shipment.baseRefName -ne "main") {
-  throw "PR #$prNumber targets '$($shipment.baseRefName)', expected 'main'"
+if ($shipment.baseRefName -ne "<base_branch>") {
+  throw "PR #$prNumber targets '$($shipment.baseRefName)', expected '<base_branch>'"
 }
 if (@($shipment.labels.name) -notcontains "model-scale-by-skill") {
   throw "PR #$prNumber is missing required GitHub label model-scale-by-skill"
@@ -242,7 +242,7 @@ If `gh pr create` fails (common in Enterprise Managed User / EMU environments wh
 1. Output the PR body file path and the compare URL for the user to create the PR in browser.
 2. Record `"pr_creation": "manual"` in the `run_ledger` entry.
 3. **The reviewer can still operate**: check out the branch directly (`git fetch origin <branch>; git checkout <branch>`) instead of `gh pr checkout <N>`. The reviewer's checklist applies identically — only the checkout protocol changes.
-4. Once the user provides the PR URL, record it in the ledger, run the same live-base repair/verification (`gh pr view <N> --json baseRefName`; `gh pr edit <N> --base main` when needed) plus label reconciliation used by the automatic path, and only then continue the reviewer loop. If API restrictions prevent the explainer from applying either field, require the user to set it and verify the resulting metadata; a manual-path PR is not complete merely because its body mentions `main` or the label.
+4. Once the user provides the PR URL, record it in the ledger, run the same live-base repair/verification (`gh pr view <N> --json baseRefName`; `gh pr edit <N> --base <base_branch>` when needed) plus label reconciliation used by the automatic path, and only then continue the reviewer loop. If API restrictions prevent the explainer from applying either field, require the user to set it and verify the resulting metadata; a manual-path PR is not complete merely because its body mentions `<base_branch>` or the label.
 
 This preserves the full pipeline integrity (reviewer still independently verifies) while accommodating enterprise environments where API-based PR creation is restricted.
 
@@ -250,10 +250,10 @@ This preserves the full pipeline integrity (reviewer still independently verifie
 
 - [ ] Branch pushed to `origin`?
 - [ ] Draft PR created via `gh pr create --draft`?
-- [ ] **Live PR base is `main`?** Verify with `gh pr view <N> --json baseRefName -q .baseRefName`; dependency ancestry or body text is not evidence, and any other value must be repaired before reviewer hand-off.
+- [ ] **Live PR base is `<base_branch>`?** Verify with `gh pr view <N> --json baseRefName -q .baseRefName`; dependency ancestry or body text is not evidence, and any other value must be repaired before reviewer hand-off.
 - [ ] Actual `model-scale-by-skill` label metadata present? Verify with `gh pr view <N> --json labels -q '.labels[].name'`; add and re-verify it before hand-off if absent. PR-body text does not satisfy this check.
 - [ ] **PR description (body) actually populated** with Summary, Model metadata, and all seven Validation and support evidence subsections? Verify with `gh pr view <N> --json body -q .body` — an empty or stale body while the report lives only in comments is not ready.
 - [ ] Branch diff contains exactly the scope-rule files for the claimed Effort tier?
 - [ ] Reviewer link posted in the draft PR?
 
-A producer who leaves a bare pushed branch without a PR is incomplete. A PR created or converted as READY by this skill violates the shipment contract, including after APPROVE. A PR whose live base is not `main`, is missing `model-scale-by-skill`, or whose **description is empty** while the report sits in comments is also incomplete.
+A producer who leaves a bare pushed branch without a PR is incomplete. A PR created or converted as READY by this skill violates the shipment contract, including after APPROVE. A PR whose live base is not `<base_branch>`, is missing `model-scale-by-skill`, or whose **description is empty** while the report sits in comments is also incomplete.

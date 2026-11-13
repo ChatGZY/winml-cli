@@ -11,7 +11,7 @@ description: >
   even when they mention an unsupported operator or a crash; those require a request to
   implement or repair model support. Do not use it merely to run or tune an already-supported
   model, optimize an existing recipe, or add a new execution provider backend.
-compatibility: Requires a microsoft/winml-cli checkout, Python 3.11 with uv, GitHub CLI with push access, and an agent runtime that can delegate fresh subagents.
+compatibility: Requires a winml-cli checkout whose origin is the configured target repository, Python 3.11 with uv, GitHub CLI with push access to that repository, and an agent runtime that can delegate fresh subagents.
 ---
 
 # Adding model support
@@ -22,11 +22,23 @@ This is a dispatcher, not the complete procedure. Load the owning role contract 
 
 ## Repository scope
 
-This skill lives in `skills/adding-model-support/` in [`microsoft/winml-cli`](https://github.com/microsoft/winml-cli). Resolve `src/...`, `tests/...`, and `examples/...` from the repository root. Keep methodology changes under `skills/adding-model-support/**` in a separate skill-only branch and PR; never mix them into a model-support PR.
+This skill lives in `skills/adding-model-support/` in the winml-cli repository. Resolve `src/...`, `tests/...`, and `examples/...` from the repository root. Keep methodology changes under `skills/adding-model-support/**` in a separate skill-only branch and PR; never mix them into a model-support PR.
+
+## Target repository
+
+This copy of the skill runs against a fork. Change these values here only; every role contract refers to them by placeholder.
+
+| Placeholder | Value | Used for |
+|---|---|---|
+| `<target_repo>` | `ChatGZY/winml-cli` | Every write: branches, pushes, draft PRs, labels, CI checks, review threads, verdict comments, and feature-gap issues. `<target_owner>` and `<target_name>` are its two halves. |
+| `<base_branch>` | `develop` | The integration branch in `<target_repo>`: the baseline is measured on `origin/<base_branch>`, every contribution branch is created from it, every rebase targets it, and every PR's live base is it. |
+| `<upstream_repo>` | `microsoft/winml-cli` | Read-only: release assets (such as runtime-check rules) and historical PR references. Never push, open PRs or issues, comment, or label here. |
+
+`origin` must be `<target_repo>`. Wherever a contract or finding says "main", "current main", "moved main", or `target_base`, read it as `<base_branch>` of `<target_repo>` (`origin/<base_branch>`). `<base_branch>` carries this customized copy of the skill, so branching from it keeps the same role contracts in every worktree the run checks out. Every `gh` command passes `--repo <target_repo>` explicitly; never rely on `gh`'s default repository, which can resolve to the parent of a fork. The orchestrator passes all three values to every role in its hand-off.
 
 ## Prerequisites and optional integrations
 
-- Run from a `microsoft/winml-cli` checkout with Python 3.11, `uv`, authenticated `gh`, and push access. The orchestrator verifies these before implementation.
+- Run from a checkout whose `origin` is `<target_repo>`, with Python 3.11, `uv`, authenticated `gh`, push access, GitHub Actions enabled, and Issues enabled on `<target_repo>`. The orchestrator verifies these before implementation.
 - The agent runtime must support fresh subagent delegation. Each role loads its file under `agents/`; if delegation is unavailable, stop as BLOCKED rather than collapsing producer, tester, and reviewer into one agent.
 - `model-breakdown` is optional. When discoverable as an installed skill, require schema `1.2+`; otherwise the planner builds the same profile from pinned source, config, and model-card evidence.
 - `auto-optimize` is optional and needed only for `--promotion-handoff`. Discover its `scripts/promotion.py` through the installed skill location. If it is absent or incompatible, promotion mode stops as BLOCKED while normal model-support work remains available. Follow the [orchestrator promotion handoff entry](./agents/orchestrator.md#promotion-handoff-entry).
@@ -57,7 +69,7 @@ planner -> producer -> tester -> learner -> explainer -> reviewer
 - Model-supplied code requires the [custom-code execution gate](./agents/orchestrator.md#custom-code-execution-gate) before any probe or run: reviewed immutable model/code revisions, explicit user authorization for those revisions, and verified credential-free, network-disabled isolation. A recipe, loader warning, historical finding, or invocation of this skill is not approval. Missing prerequisites mean BLOCKED, never an automatic trust-flag retry.
 - Planner freezes the target only after current-main baseline evidence. If reality contradicts it, return to planner.
 - Producer, tester, explainer, and reviewer remain separate agents. The reviewer starts from a fresh context after the draft PR exists.
-- Every model-support PR targets `main`, remains draft, and carries `model-scale-by-skill`. Dependency ancestry never changes the live PR base.
+- Every model-support PR targets `<base_branch>`, remains draft, and carries `model-scale-by-skill`. Dependency ancestry never changes the live PR base.
 - The reviewer writes only one normal PR comment containing `APPROVE`, `REQUEST_CHANGES`, or `REJECT`; these are not GitHub Review states.
 - Every required `(EP, device, precision)` tuple retains exact PASS, blocked, or exhausted-failure evidence. Never infer one tuple from another.
 - Run one bounded final-SHA FP32 CPU functional smoke Eval; do not present it as representative accuracy. Keep per-tuple performance and both component-level and op-level Analyze evidence.
