@@ -2,7 +2,7 @@
   "_meta": {
     "family": "_meta",
     "purpose": "Methodology-level findings about this skill itself. Not a model family. Lives alongside per-family files so the dialectical record covers the framework too.",
-  "last_updated": "2026-08-27 (_meta-111 through _meta-114: stream-agnostic build completion, execution-input sealing, CI environment equivalence, and EXHAUSTED-FAIL tuples)",
+  "last_updated": "2026-11-13 (_meta-127 and _meta-128: public L2 via winml eval --mode compare, planner baseline-probe command contract)",
     "architecture_note": "This skill was refactored from a two-agent (producer + reviewer/REVIEW.md) into a six-agent pipeline, driven by an orchestrator (seven role files total under agents/). Role-to-step map: orchestrator is the entry point + loop driver + per-model isolation owner (_meta-043/_meta-044), planner owns Step 0/1/1b, producer owns Step 2/3/5, tester owns the Goal-ladder march, learner owns Step 4/4b/4c, explainer owns Step 6/7, reviewer is the independent post-PR verifier (formerly REVIEW.md). Historical findings below were written under the old structure; their terminology has been migrated but the dialectical reasoning that motivated the split is preserved.",
     "epistemics_warning": "These are observations about the skill (SKILL.md + the six agent role files under agents/), not about any model. Update when the skill's own claims are refuted."
   },
@@ -3135,6 +3135,81 @@
       "mechanism_notes": "The repair changed only TYPE_CHECKING import/annotation/explicit None behavior; the exact workflow package invocation then passed and GitHub lint was green on c07a51ac.",
       "resolution": "DONE - producer and reviewer now enforce workflow-defined pre-push static checks in commit https://github.com/gim-home/ModelKitArtifacts/commit/cf7ceb0ef8c75c5d6f4fc8ac68192a36bebb5176, tracked by draft Lane A PR https://github.com/gim-home/ModelKitArtifacts/pull/350.",
       "last_updated": "2026-09-13"
+    },
+    {
+      "id": "_meta-127",
+      "trigger": "doc-code-drift | pr-mining",
+      "title": "L2 contract said no first-class PyTorch-reference mode exists, but `winml eval --mode compare --model-id` is the public L2 command on develop",
+      "observation": "During the microsoft/resnet-34 run1 (candidate 1f514768, ORT CPU, develop base de9acaeb) tester.md L2 told the tester there is 'No first-class --reference pytorch mode today' and to write a scratch temp/ script, while the same contract (_meta-116) requires a public reproduction command for L2. A scratch script cannot close that ladder, so the orchestrator had to rule mid-run that public L2 = `winml eval --mode compare`. On develop (PRs #1139 and #1221, both ancestors of de9acaeb, classification IN-BRANCH per _meta-030) `winml eval --mode compare -m <artifact>.onnx --model-id microsoft/resnet-34 --ep cpu --device cpu [--input-data real_image.npz] -o <out>.json` prints 'Reference runtime: pytorch' and 'Reference device: cpu' and reports cosine, MSE, SQNR, PSNR and max-abs per output tensor. Tester ran it for fp32 and fp16 with a random input and one real mini-imagenet row: fp32 cosine 0.9999999999991549 / max-abs 8.8e-06 (real row); fp16 cosine 0.9999978749476368 / max-abs 0.014164 / SQNR 53.4 dB; the internal scratch script agreed. The compare output has no top-1 field, so the frozen top-1-must-match gate still needed a tester-owned check.",
+      "rule_change": "tester.md L2 now names `winml eval --mode compare --model-id <hf-id> [--input-data <npz>]` as the public L2 closure (reference runtime must read pytorch), keeps scratch scripts as supplementary/fallback evidence only, states that the command lacks top-1 agreement, and the public_reproducible_commands example plus public_sequence_closure indexes use two compare commands instead of a placeholder committed harness. reviewer.md Goal-L2 and public-closure rows require the compare command and its output JSON and reject a scratch-only L2 entry.",
+      "patch_site": "agents/tester.md L2 section + public_reproducible_commands/public_sequence_closure example; agents/reviewer.md Goal-L2 row and public-closure row",
+      "skill_edit": "agents/tester.md (L2 section, public command example, closure indexes); agents/reviewer.md (Goal-L2 row, public reproduction closure row); skill_meta/findings.json; pushed skill-only branch chatgzy/skill-learn-resnet-34-run1",
+      "scope": {
+        "validated_on": [
+          "microsoft/resnet-34 @ cpu/cpu fp32+fp16 @ CPUExecutionProvider @ develop de9acaeb: temp/microsoft_resnet-34/tester_run1/l2_public/compare_{fp32,fp16}_{random,real}.json, exit 0 for all four commands"
+        ],
+        "falsified_on": [
+          "tester.md L2 claim that no first-class PyTorch-reference parity mode exists (true before PRs #1139/#1221)"
+        ],
+        "refines": [
+          "_meta-116",
+          "_meta-115"
+        ],
+        "not_yet_tested_on": [
+          "composite seq2seq / decoder-with-past models, whose multi-component graphs the compare command may not drive",
+          "special-token-input models where random --mode compare inputs are invalid",
+          "GPU/NPU candidate EPs"
+        ]
+      },
+      "gotchas": [
+        "Random-input compare is a weaker signal than --input-data with a real preprocessed row; the run used both.",
+        "Compare reports no top-1 agreement; keep a tester-owned top-1 check when the frozen bounds require it.",
+        "The .npz keys must equal the artifact input names (pixel_values for resnet) and the leading axis is the sample axis."
+      ],
+      "mechanism_confirmed": true,
+      "mechanism_notes": "Confirmed by running the command on the tested artifacts and reading the CLI help/source (commands/eval.py --mode/--input-data/--reference options; reference runtime printed as pytorch when --reference is absent). Falsified if compare silently loads an ONNX reference for --model-id runs.",
+      "resolution": "DONE - tester.md/planner.md/reviewer.md edited on skill-only branch chatgzy/skill-learn-resnet-34-run1 (ChatGZY/winml-cli, based on origin/develop de9acaeb); the exact pushed commit sha is recorded in the microsoft/resnet-34 run1 Learner handoff.",
+      "last_updated": "2026-11-13",
+      "effort_tier_required": "n/a (methodology)",
+      "goal_tier_reached": "n/a",
+      "recipe_template": "n/a",
+      "feature_gaps_filed": []
+    },
+    {
+      "id": "_meta-128",
+      "trigger": "cli-surprise",
+      "title": "Planner baseline-probe templates omit --model-id on `winml eval <onnx>` and point `winml config -o` at the build directory",
+      "observation": "The microsoft/resnet-34 run1 planner followed planner.md Step 1b literally. (1) `winml eval -m temp/baseline_<stem>/model.onnx --task <task> ...` needs --model-id when given an ONNX path (tester.md already showed it; planner.md did not); the corrected command passed. (2) The same baseline eval downloaded and generated timm/mini-imagenet (about 7.4 GB) and took roughly 13 minutes on first use, with 1-sample accuracy 0.0 meaning operability only; a default timeout would have killed it. (3) `winml config -m <hf-id> -o temp/baseline_<stem>` targets the directory that `winml build -o temp/baseline_<stem>` just populated; reproduced on develop de9acaeb: `-o <non-empty dir>` exits with 'Output directory ... already exists and is not empty. Re-run with --overwrite to replace its contents', and following that hint would replace the baseline build, while `-o <dir>/image-classification_config.json` succeeded. The charter used the .json path.",
+      "rule_change": "planner.md Step 1b now shows `winml eval -m <onnx> --model-id <hf-id> --task <task> ...` with a first-run dataset download / long-timeout warning, and `winml config ... -o temp/baseline_<stem>/<task>_config.json` with an explicit warning never to point -o at the build directory or reach for --overwrite.",
+      "patch_site": "agents/planner.md Step 1b baseline probe commands",
+      "skill_edit": "agents/planner.md (Step 1b L3 probe and starting-recipe commands); skill_meta/findings.json; pushed skill-only branch chatgzy/skill-learn-resnet-34-run1",
+      "scope": {
+        "validated_on": [
+          "microsoft/resnet-34 @ develop de9acaeb: baseline eval needed --model-id; config -o non-empty directory failure reproduced by the learner on 2026-11-13"
+        ],
+        "falsified_on": [
+          "planner.md Step 1b command templates as runnable verbatim"
+        ],
+        "refines": [
+          "_meta-061"
+        ],
+        "not_yet_tested_on": [
+          "tasks whose default dataset is small enough that the first-eval download is not noticeable",
+          "composite models, where winml config emits two recipe files"
+        ]
+      },
+      "gotchas": [
+        "`winml config -o` on a non-existent path without a .json suffix was not probed; always give a .json file path.",
+        "The 7.4 GB figure is for timm/mini-imagenet only; other task-default datasets differ."
+      ],
+      "mechanism_confirmed": true,
+      "mechanism_notes": "Confirmed by reading utils/cli.py guard_output (non-empty directories block unless --overwrite) and by running both config invocations against a scratch directory.",
+      "resolution": "DONE - tester.md/planner.md/reviewer.md edited on skill-only branch chatgzy/skill-learn-resnet-34-run1 (ChatGZY/winml-cli, based on origin/develop de9acaeb); the exact pushed commit sha is recorded in the microsoft/resnet-34 run1 Learner handoff.",
+      "last_updated": "2026-11-13",
+      "effort_tier_required": "n/a (methodology)",
+      "goal_tier_reached": "n/a",
+      "recipe_template": "n/a",
+      "feature_gaps_filed": []
     }
   ]
 }

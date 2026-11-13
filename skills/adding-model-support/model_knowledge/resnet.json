@@ -1,0 +1,176 @@
+{
+  "_meta": {
+    "family": "resnet",
+    "hf_model_type": "resnet",
+    "models_tested": [
+      "microsoft/resnet-34"
+    ],
+    "last_updated": "2026-11-13",
+    "epistemics_warning": "Observational findings, not ground truth. Re-validate on new checkpoints / ORT versions / EPs before relying on a finding to skip work. Sibling shipped recipes microsoft/resnet-18 and microsoft/resnet-50 (legacy flat layout, fp32 + w8a16) were not re-run by this contribution."
+  },
+  "findings": [
+    {
+      "id": "resnet-001",
+      "title": "microsoft/resnet-34 builds, perfs and evals on develop with zero source edits, so a recipe-only L0 contribution (nested cpu/cpu fp32 + fp16) reaches Goal L3 on CPU",
+      "observation": "Run resnet-34-run1, develop base de9acaeb, winml 0.4.0, torch 2.15.0, transformers 4.57.6, optimum 2.1.0, onnx 1.18.0, ORT 1.27.1, host CPU only (target_eps cpu). Recipe-free baseline `winml build -m microsoft/resnet-34 --ep cpu --device cpu --no-analyze --no-optimize --no-quant --no-compile` exited 0 in 5.2 s (87,203,865 B model.onnx, input pixel_values [1,3,224,224] float32, output logits [1,1000]). Candidate 1f514768 ships examples/recipes/microsoft_resnet-34/cpu/cpu/image-classification_{fp32,fp16}_config.json. Diff of each recipe against `winml config` auto output (temp/baseline_microsoft_resnet-34/image-classification_config.json): fp32 differs only by an eval block (task image-classification, dataset timm/mini-imagenet, split test, samples 100); fp16 additionally carries the quant block (mode fp16, fp16_keep_io_types true, model_id/model_type/task filled). Export block is the autoconf default: opset 17, batch 1, dynamo false, enable_hierarchy_tags true, value_range [0,1], compatibility.transformers_attention eager, optim {}. Tester ladder at the candidate SHA: L0 PASS x2, L1 PASS x2, L2 PASS x2, L3 PASS (smoke), Analyze ANALYZE-PARTIAL-SUCCESS; coverage full, no deferred or exhausted tuples. The recipe-free fp32 artifact (diagnostic/norecipe_regression) is byte-identical to the recipe fp32 artifact (sha256 95d015e8d3cf189ef7de7466ccc174abf189ffb9de39043d440c8a2a3df0f5a0).",
+      "scope": {
+        "validated_on": [
+          "microsoft/resnet-34 @ 4d180fbdc81b4d5d4eaa86ab89bdd669200dd477 @ fp32 @ CPUExecutionProvider",
+          "microsoft/resnet-34 @ 4d180fbdc81b4d5d4eaa86ab89bdd669200dd477 @ fp16 @ CPUExecutionProvider"
+        ],
+        "falsified_on": [],
+        "not_yet_tested_on": [
+          "microsoft/resnet-18 and microsoft/resnet-50 under the nested layout (shipped flat recipes were not rebuilt)",
+          "w8a8 and w8a16 for resnet-34 (resnet-18/-50 ship w8a16 recipes; charter precision_plan required only fp32 and fp16)",
+          "OpenVINO, QNN, DML and other EPs: not in the charter's target_eps and not run",
+          "resnet checkpoints with layer_type bottleneck (resnet-50 and larger) on current develop"
+        ]
+      },
+      "effort_tier_required": "L0",
+      "goal_tier_reached": "L3",
+      "recipe_template": "examples/recipes/microsoft_resnet-34/cpu/cpu/image-classification_fp32_config.json",
+      "gotchas": [
+        "Sibling resnet-18/-50 recipes use the legacy flat layout and lack compatibility.transformers_attention: eager; do not copy their layout (_meta-058).",
+        "Recipe value is the pinned eval.dataset block and the explicit fp16 quant block, not any build-time override: the no-recipe fp32 build produces the same bytes."
+      ],
+      "feature_gaps_filed": [],
+      "mechanism_confirmed": true,
+      "mechanism_notes": "Confirmed by sha256 equality of recipe and recipe-free fp32 artifacts and by the field-level recipe-vs-config diff. Falsified for another resnet checkpoint if its recipe-free build needs a loader or export override.",
+      "last_updated": "2026-11-13"
+    },
+    {
+      "id": "resnet-002",
+      "title": "resnet-34 fp16 via recipe quant.mode fp16 (keep_io_types) halves the artifact and stays within cosine >= 0.999999 of PyTorch on CPU",
+      "observation": "Artifact cpu/cpu/fp16/model.onnx: 43,625,770 B vs fp32 87,203,865 B, 91 nodes (89 plus 2 Cast at the graph boundary), 74 initializers all FLOAT16 (fp32: 74 FLOAT), graph I/O still float32 pixel_values [1,3,224,224] and logits [1,1000]. The same artifact (sha256 8ec8179a1060dad85dd758b0f6f25a42df773af055a9a3d9e163b2d17c3c4101) is produced with and without the CLI --precision fp16 flag. L2 via `winml eval --mode compare -m <onnx> --model-id microsoft/resnet-34 --ep cpu --device cpu` against the PyTorch fp32 checkpoint (reference runtime pytorch, CPU), frozen bounds fp32 cosine >= 0.9999 / max-abs <= 1e-3, fp16 cosine >= 0.999 / max-abs <= 0.1, top-1 must match. fp32: cosine 0.9999999999991549 to 0.9999999999997774, max-abs 2.9e-06 to 8.8e-06. fp16: cosine 0.9999978749476368 to 0.9999987747068846, max-abs 0.00779 to 0.01416, SQNR 53.4 dB on the real row. Inputs: two seeded uniform[0,1] tensors plus mini-imagenet test row 0; top-1 matched PyTorch on all three (78, 78, 12).",
+      "scope": {
+        "validated_on": [
+          "microsoft/resnet-34 @ fp32 @ CPUExecutionProvider",
+          "microsoft/resnet-34 @ fp16 (fp16_keep_io_types true) @ CPUExecutionProvider"
+        ],
+        "falsified_on": [],
+        "not_yet_tested_on": [
+          "fp16 on a GPU or NPU EP, where kernel precision differs",
+          "larger or bottleneck resnet checkpoints",
+          "accuracy on a representative dataset (L3 was a 2-sample smoke on fp32 only)"
+        ]
+      },
+      "effort_tier_required": "L0",
+      "goal_tier_reached": "L2",
+      "recipe_template": "examples/recipes/microsoft_resnet-34/cpu/cpu/image-classification_fp16_config.json",
+      "gotchas": [
+        "The compare command reports no top-1 agreement; top-1 was checked by the tester's internal script on the same inputs.",
+        "Three inputs bound the parity claim; this is not a distribution-level accuracy statement."
+      ],
+      "feature_gaps_filed": [],
+      "mechanism_confirmed": false,
+      "mechanism_notes": "Numbers are measured; the cause of the small residual (fp16 weight and activation rounding over 36 convs) is an expectation, not isolated per layer. A representative-dataset accuracy delta would falsify 'safe fp16'.",
+      "last_updated": "2026-11-13"
+    },
+    {
+      "id": "resnet-003",
+      "title": "On CPUExecutionProvider resnet-34 fp16 shows no latency gain over fp32",
+      "observation": "winml perf -m <onnx> --device cpu --ep cpu, 100 iterations, 10 warmup, batch 1, ORT 1.27.1, AMD EPYC 7763 (baseline perf record). fp32: mean 79.474 ms, p50 78.921, p99 89.923, 12.58 samples/s. fp16: mean 79.448 ms, p50 78.801, p99 92.307, 12.59 samples/s. The 0.03 ms difference is far inside the run-to-run std (1.8 to 2.4 ms). Recipe-free baseline perf on the earlier build: mean 79.32 ms, RSS 623.6 MiB.",
+      "scope": {
+        "validated_on": [
+          "microsoft/resnet-34 @ fp32 @ CPUExecutionProvider",
+          "microsoft/resnet-34 @ fp16 @ CPUExecutionProvider"
+        ],
+        "falsified_on": [],
+        "not_yet_tested_on": [
+          "other CPUs (AVX512-FP16 or AMX hosts may differ)",
+          "other EPs and devices",
+          "batch sizes above 1"
+        ]
+      },
+      "effort_tier_required": "L0",
+      "goal_tier_reached": "L1",
+      "recipe_template": "examples/recipes/microsoft_resnet-34/cpu/cpu/image-classification_fp16_config.json",
+      "gotchas": [
+        "Do not present fp16 as a CPU speed-up in the PR; its value on this host is artifact size only (43.6 MB vs 87.2 MB)."
+      ],
+      "feature_gaps_filed": [],
+      "mechanism_confirmed": false,
+      "mechanism_notes": "Hypothesis only: ORT CPU runs fp16 Conv/Gemm through fp32-compute fallback kernels with no native fp16 speed-up on this CPU. Not verified (no ORT profiling or provider-assignment dump was taken). Profiling with onnxruntime profile output would confirm or refute it.",
+      "last_updated": "2026-11-13"
+    },
+    {
+      "id": "resnet-004",
+      "title": "resnet-34 analysis: all seven operator types are supported on every analyzed EP except OpenVINO CPU fp16, which marks GlobalAveragePool unsupported",
+      "observation": "Both artifacts have opset 17, 7 unique operator types (Conv 36, Relu 33, Add 16, MaxPool 1, GlobalAveragePool 1, Flatten 1, Gemm 1; 89 nodes; fp16 adds Cast 2 for 91). `winml analyze --model <onnx> --ep all [--device all]` with rules-v0.4.0 (via WINMLCLI_RULES_DIR): NvTensorRTRTX, QNN (NPU and GPU) and OpenVINO (NPU, GPU) classify every operator supported for both precisions; OpenVINO/CPU supports all fp32 operators but marks GlobalAveragePool unsupported on the fp16 artifact. CUDA, MIGraphX, TensorRT, DML, WinMLCG, CPU EP and VitisAI returned empty classifications (unavailable or no rules on this host). Every analyze command exited 1 (fp32 and fp16, both --ep all and --ep all --device all) with complete JSON emitted: ANALYZE-PARTIAL-SUCCESS. The analyze_result.json that `winml build` writes beside the artifact targeted DmlExecutionProvider only, with runtime_support false and empty classifications, so it is not usable operator-support evidence here; the --ep all runs are. Component join (tester-derived, since model_breakdown.json carries no ONNX node mapping): resnet.embedder 3 nodes, resnet.encoder.stages 83, resnet.pooler 1, classifier 2, 0 unmapped, from export hierarchy tags.",
+      "scope": {
+        "validated_on": [
+          "microsoft/resnet-34 @ fp32 @ analyze --ep all (rules-v0.4.0)",
+          "microsoft/resnet-34 @ fp16 @ analyze --ep all (rules-v0.4.0)"
+        ],
+        "falsified_on": [],
+        "not_yet_tested_on": [
+          "actual OpenVINO CPU runtime execution of the fp16 artifact (static rule analysis only)",
+          "later rules releases than v0.4.0"
+        ]
+      },
+      "effort_tier_required": "L0",
+      "goal_tier_reached": "L0",
+      "recipe_template": "examples/recipes/microsoft_resnet-34/cpu/cpu/image-classification_fp16_config.json",
+      "gotchas": [
+        "OpenVINO/CPU fp16 GlobalAveragePool 'unsupported' is a static rule result; it is a flag for anyone targeting OpenVINO CPU with fp16, not a runtime failure on the ORT CPU EP that was tested.",
+        "Empty classification on CUDA/DML/CPU/Vitis rows means no verdict, not 'supported'."
+      ],
+      "feature_gaps_filed": [],
+      "mechanism_confirmed": false,
+      "mechanism_notes": "Rule-table result only. Running the fp16 artifact on the OpenVINO CPU EP would confirm or refute the unsupported-operator claim.",
+      "last_updated": "2026-11-13"
+    },
+    {
+      "id": "resnet-005",
+      "title": "resnet-34 export traces 60 of 220 modules but tags 89 of 89 ONNX nodes, and htp metadata gives the stable module and parameter counts",
+      "observation": "export_htp_metadata.json (both precisions, identical): model class ResNetForImageClassification, framework transformers, 220 total modules, 21,797,672 parameters, TracingHierarchyBuilder source trace, modules_traced 60, execution_steps 120; export log reports Tagged nodes 89 (100.0 percent coverage). winml_build_config.json matches the input recipe plus auto false and eval runtime/device/dataset defaults (shuffle true, seed 42, skip_build true); optim stays {} (no fusion flags were filled in for this convolutional graph). Trace of 60/220 is the executed-module subset, not a coverage gap, since every ONNX node is tagged.",
+      "scope": {
+        "validated_on": [
+          "microsoft/resnet-34 @ fp32 and fp16 @ export (transformers 4.57.6, torch 2.15.0)"
+        ],
+        "falsified_on": [],
+        "not_yet_tested_on": [
+          "other resnet depths (module and parameter counts scale with depths [3,4,6,3])"
+        ]
+      },
+      "effort_tier_required": "L0",
+      "goal_tier_reached": "L0",
+      "recipe_template": "examples/recipes/microsoft_resnet-34/cpu/cpu/image-classification_fp32_config.json",
+      "gotchas": [
+        "Do not read 60/220 traced modules as partial coverage; use the Tagged nodes percentage."
+      ],
+      "feature_gaps_filed": [],
+      "mechanism_confirmed": true,
+      "mechanism_notes": "Read directly from export_htp_metadata.json and the build export summary.",
+      "last_updated": "2026-11-13"
+    },
+    {
+      "id": "resnet-006",
+      "title": "resnet-34 L3 is a 2-sample FP32 CPU smoke on timm/mini-imagenet; it proves evaluator operability, not accuracy",
+      "observation": "winml eval -m cpu/cpu/fp32/model.onnx --model-id microsoft/resnet-34 -c <fp32 recipe> --ep cpu --device cpu --samples 2, dataset timm/mini-imagenet revision bd8779f9d33c061ea6e75fdd3bce4e43dd679060, split test (5000 rows), shuffle seed 42, ConvNext image processor from preprocessor_config.json. Result accuracy 0.5 on 2 samples (1 of 2 correct; the miss predicted dung beetle 305 for aligned label rhinoceros beetle 306), 10.77 samples/s. The dataset's 100 WordNet synset labels are aligned to the checkpoint's 1000 ImageNet indexes by winml's get_imagenet_label_map, which fetches the torchvision index from raw.githubusercontent.com at run time; the tester verified config.id2label matches that index in order (0 first-synonym mismatches) and that selected rows match the raw parquet. The first eval of the task downloads and generates the full dataset (about 7.4 GB, about 13 minutes). Only the FP32 CPU tuple was evaluated; fp16 has L2 parity but no task metric.",
+      "scope": {
+        "validated_on": [
+          "microsoft/resnet-34 @ fp32 @ CPUExecutionProvider @ 2 samples"
+        ],
+        "falsified_on": [],
+        "not_yet_tested_on": [
+          "accuracy at representative sample count (100 samples is the recipe default, not run)",
+          "fp16 task accuracy",
+          "offline or air-gapped eval (label map needs network access to raw.githubusercontent.com)"
+        ]
+      },
+      "effort_tier_required": "L0",
+      "goal_tier_reached": "L3",
+      "recipe_template": "examples/recipes/microsoft_resnet-34/cpu/cpu/image-classification_fp32_config.json",
+      "gotchas": [
+        "Report 0.5 as a smoke value only; with 2 samples it carries no accuracy information and must not be compared to the 0.80 seen on a separate 20-sample baseline eval.",
+        "winml eval on an .onnx path requires --model-id.",
+        "Eval has an undeclared runtime network dependency for the label map in addition to the dataset download."
+      ],
+      "feature_gaps_filed": [],
+      "mechanism_confirmed": true,
+      "mechanism_notes": "Row-level selection, label alignment and prediction were verified by tester l3_verify.py against the raw parquet.",
+      "last_updated": "2026-11-13"
+    }
+  ]
+}

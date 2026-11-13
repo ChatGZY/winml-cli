@@ -118,7 +118,8 @@ Each marched ladder row carries the exact `command` and raw `evidence`. L0 and L
     "winml build -c <checked-in-fp16-recipe>.json -m <hf-id> -o $OUT/fp16 --precision fp16",
     "winml perf -m $OUT/fp32/model.onnx --device cpu --ep cpu",
     "winml perf -m $OUT/fp16/model.onnx --device cpu --ep cpu",
-    "python <committed-public-l2-harness> --fp32 $OUT/fp32/model.onnx --fp16 $OUT/fp16/model.onnx",
+    "winml eval --mode compare -m $OUT/fp32/model.onnx --model-id <hf-id> --ep cpu --device cpu --input-data <real-inputs>.npz -o $OUT/l2_fp32.json",
+    "winml eval --mode compare -m $OUT/fp16/model.onnx --model-id <hf-id> --ep cpu --device cpu --input-data <real-inputs>.npz -o $OUT/l2_fp16.json",
     "python <committed-public-l3-harness> --model $OUT/fp32/model.onnx --dataset <pinned-dataset>",
     "winml analyze --model $OUT/fp32/model.onnx --ep all --output $OUT/fp32/analyze.json",
     "winml analyze --model $OUT/fp16/model.onnx --ep all --output $OUT/fp16/analyze.json"
@@ -127,9 +128,9 @@ Each marched ladder row carries the exact `command` and raw `evidence`. L0 and L
     { "tier": "L0", "tuple": "CPUExecutionProvider/cpu/fp32", "command_indexes": [1], "status": "CLOSED" },
     { "tier": "L0", "tuple": "CPUExecutionProvider/cpu/fp16", "command_indexes": [2], "required_tokens": ["--precision", "fp16"], "forbidden_tokens": ["--no-quant"], "status": "CLOSED" },
     { "tier": "L1", "tuple": "all required tuples", "command_indexes": [3, 4], "status": "CLOSED" },
-    { "tier": "L2", "tuple": "identical-input parity", "command_indexes": [5], "status": "CLOSED" },
-    { "tier": "L3", "tuple": "CPUExecutionProvider/cpu/fp32", "command_indexes": [6], "status": "CLOSED" },
-    { "tier": "Analyze", "tuple": "all built artifacts", "command_indexes": [7, 8], "status": "CLOSED" }
+    { "tier": "L2", "tuple": "identical-input parity", "command_indexes": [5, 6], "status": "CLOSED" },
+    { "tier": "L3", "tuple": "CPUExecutionProvider/cpu/fp32", "command_indexes": [7], "status": "CLOSED" },
+    { "tier": "Analyze", "tuple": "all built artifacts", "command_indexes": [8, 9], "status": "CLOSED" }
   ],
   "ceiling_reached": "L3",
   "outcome": { "shipped_tier": "<charter.outcome>", "highest_goal_verdict": "L3 PASS", "coverage": "full | partial | required-tuples-contain-exhausted-failures", "deferred_tuples": ["<host-blocked-ep>/<device>/<precision>"], "exhausted_tuples": ["<reachable-ep>/<device>/<precision>"] },
@@ -244,9 +245,9 @@ winml perf -m <artifact>.onnx --device cpu --ep cpu
 - **Special-token-pooling models** (NLI heads, `BartForSequenceClassification`, anything whose forward() does `input_ids.eq(<special_id>).nonzero()[-1]`): `winml perf` uses RANDOM dummy inputs and IGNORES the recipe's `value_range`, so a clean build may crash at perf with `Gather indices=-1` ([`_meta-017`](../skill_meta/findings.json)). Workaround: custom Python perf script with real tokenized inputs — valid L1 evidence in lieu of CLI output.
 - **Big-model L1**: `winml perf --memory` is default-on (PR#861) — capture RAM + VRAM deltas ([`_meta-024`](../skill_meta/findings.json)); for NPU/GPU FAIL retry with `--ep-options KEY=VALUE` (e.g. QNN `htp_performance_mode=burst`) BEFORE declaring FAIL ([`_meta-026`](../skill_meta/findings.json)); composite models need a perf run on the composite path (`-m <hf-id> --task <task>`), not just per-component (PR#866).
 
-### L2 — Numerical delta vs. PyTorch (CLI gap; ad-hoc script)
+### L2 — Numerical delta vs. PyTorch (public: `winml eval --mode compare`)
 
-No first-class `--reference pytorch` mode today. Write a one-off comparison script in `temp/` and cite it. Before execution, record precision-specific cosine / max-abs acceptance bounds and their numerical rationale in the fresh evidence root; true fp16 may use a justified wider max-abs bound than fp32. Report every value and the bound together. A completed command whose values miss a frozen bound is a numerical `FAIL` for that tier even though it is not a process crash; route it for adjudication rather than silently changing the bound.
+A first-class PyTorch-reference mode exists on `<base_branch>` ([`_meta-127`](../skill_meta/findings.json); PRs #1139 and #1221, both IN-BRANCH): `winml eval --mode compare -m <artifact>.onnx --model-id <hf-id> --ep cpu --device cpu [--input-data <inputs>.npz] -o <out>.json` runs the artifact and the original Hugging Face checkpoint (reference runtime `pytorch`, CPU, printed in the run header) on identical inputs and writes per-output cosine, MSE, SQNR/PSNR and max-abs. Default inputs are random; `--input-data` takes an `.npz` whose keys are the artifact's input names (build it from one real dataset row with the checkpoint's own processor). Use this command as the public L2 closure and put it in `public_reproducible_commands`; it does not report top-1 agreement, so any top-1 gate in the frozen bounds needs a separate tester-owned check. A scratch script in `temp/` remains valid supplementary or internal evidence (and the fallback for composite or special-token models the command cannot drive), but it cannot close the public command ladder alone. Before execution, record precision-specific cosine / max-abs acceptance bounds and their numerical rationale in the fresh evidence root; true fp16 may use a justified wider max-abs bound than fp32. Report every value and the bound together. A completed command whose values miss a frozen bound is a numerical `FAIL` for that tier even though it is not a process crash; route it for adjudication rather than silently changing the bound.
 
 - **Composite seq2seq / decoder-with-past**: a single-step decoder smoke-test with zero-filled KV is NOT apples-to-apples vs. PT prefill - feed identical KV state on both sides or compare full generate loops. Component parity does not prove autoregressive correctness: use at least two distinct real source rows, assert distinct encoder states, compare each complete bounded candidate token sequence with its reference, and require candidate prediction diversity only when the corresponding reference predictions differ. Run a focused regression proving the encoder attention mask's active positions stay aligned with the padded encoder state (`_meta-123`). **Encoder-side L2 is straightforward** and gives a clean signal (cosine approximately 1.0 + max-abs <= 1e-3) even when decoder L2 is harness-blocked.
 - **Hand-written L2 scripts that re-export ONNX** for >2GB models must call `output_path.resolve()` before `torch.onnx.export` or they leak UUID `.data` files into CWD ([`_meta-023`](../skill_meta/findings.json)).

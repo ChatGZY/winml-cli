@@ -261,12 +261,18 @@ winml perf -m temp/baseline_<stem>/model.onnx --ep cpu --device cpu
 
 # L3 probe — can this task produce a meaningful functional-smoke metric?
 # Use one real sample and task-specific caps for labels/prompts/beams/frames/length.
-winml eval -m temp/baseline_<stem>/model.onnx --task <task> --ep cpu --device cpu --samples 1
+# A .onnx path REQUIRES --model-id (the CLI errors without it). The FIRST eval downloads and generates
+# the whole task-default dataset (microsoft/resnet-34: timm/mini-imagenet, ~7.4 GB, ~13 min): give it a
+# long timeout and treat a 1-sample accuracy of 0.0 as operability only (_meta-128).
+winml eval -m temp/baseline_<stem>/model.onnx --model-id <hf-id> --task <task> --ep cpu --device cpu --samples 1
 
 # Starting recipe — generate main's auto-config recipe. THIS is the producer's baseline
 # artifact and the diff anchor for explainer/reviewer. Use necessary task/class arguments;
 # NO -p (precision is chosen later). Custom-code execution is separately gated.
-winml config -m <hf-id> [-t <task>] [--model-class <cls>] -o temp/baseline_<stem>
+# -o MUST be a .json FILE path, never the baseline build directory: a non-empty directory fails with
+# "Output directory ... already exists and is not empty" (suggesting --overwrite, which would replace
+# the baseline build contents) (_meta-128).
+winml config -m <hf-id> [-t <task>] [--model-class <cls>] -o temp/baseline_<stem>/<task>_config.json
 # If custom code is required, stop as BLOCKED unless the custom-code execution gate passes.
 # Only then use --trust-remote-code with approved exact revisions inside credential-free isolation.
 ```
